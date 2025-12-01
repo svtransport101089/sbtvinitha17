@@ -1,7 +1,8 @@
+
 import React, { useRef } from 'react';
 import { Page } from '../../types';
 import { useToast } from '../../hooks/useToast';
-import { exportDb, importDb } from '../../services/googleScriptMock';
+import { exportDb, importDb, updateSupabaseKey } from '../../services/googleScriptMock';
 
 interface SidebarProps {
   currentPage: Page;
@@ -105,6 +106,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
         }
     };
 
+    const handleResetKey = () => {
+        if (window.confirm("Are you sure you want to reset the Supabase API Key? This will reload the application.")) {
+             updateSupabaseKey('');
+        }
+    };
+
 
   return (
     <div className="flex flex-col w-64 bg-gray-800 text-white">
@@ -132,6 +139,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
               <a href="#" onClick={(e) => { e.preventDefault(); handleLoadDatabaseClick(); }} className="flex items-center px-4 py-3 text-gray-200 transition-colors duration-200 transform hover:bg-gray-700 hover:text-white">
                   <UploadIcon />
                   <span className="mx-4 font-medium">Load Database</span>
+              </a>
+              <a href="#" onClick={(e) => { e.preventDefault(); handleResetKey(); }} className="flex items-center px-4 py-3 text-gray-200 transition-colors duration-200 transform hover:bg-gray-700 hover:text-white">
+                  <KeyIcon />
+                  <span className="mx-4 font-medium">Reset API Key</span>
               </a>
               <input
                   type="file"
@@ -176,6 +187,9 @@ const SaveIcon = () => (
 );
 const UploadIcon = () => (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+);
+const KeyIcon = () => (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
 );
 
 export default Sidebar;

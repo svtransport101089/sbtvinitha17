@@ -42,10 +42,15 @@ export const updateSupabaseKey = (key: string) => {
 };
 
 // --- Helper for Supabase Errors ---
+const isTableMissing = (error: any) => error?.code === '42P01';
+
 const handleSupabaseError = (error: any, context: string) => {
     console.error(`Error in ${context}:`, error);
     if (isKeyMissing()) {
         throw new Error(`Supabase Key is missing. Please enter your API Key in the prompt.`);
+    }
+    if (error?.message?.includes('JWT') || error?.code === 'PGRST301') {
+        throw new Error(`Authentication failed. Please reset your API Key via the sidebar.`);
     }
     throw new Error(error.message || `Failed to ${context}`);
 };
@@ -56,7 +61,13 @@ const handleSupabaseError = (error: any, context: string) => {
 export const getInvoices = async (): Promise<InvoiceData[]> => {
     if (isKeyMissing()) return []; // Prevent call if key is missing
     const { data, error } = await supabase.from('invoices').select('*');
-    if (error) handleSupabaseError(error, 'getInvoices');
+    if (error) {
+        if (isTableMissing(error)) {
+            console.warn(`Table 'invoices' not found in Supabase. Returning empty list.`);
+            return [];
+        }
+        handleSupabaseError(error, 'getInvoices');
+    }
     return data as InvoiceData[];
 };
 
@@ -64,7 +75,10 @@ export const generateNewMemoNumber = async (): Promise<string> => {
     if (isKeyMissing()) return 'SBT-001';
     // Fetch all memo numbers to calculate the next one. 
     const { data, error } = await supabase.from('invoices').select('trips_memo_no');
-    if (error) handleSupabaseError(error, 'generateNewMemoNumber');
+    if (error) {
+        if (isTableMissing(error)) return 'SBT-001';
+        handleSupabaseError(error, 'generateNewMemoNumber');
+    }
 
     let maxNum = 0;
     (data || []).forEach((i: { trips_memo_no: string }) => {
@@ -92,8 +106,10 @@ export const searchInvoiceByMemoNo = async (memoNo: string): Promise<InvoiceData
         .eq('trips_memo_no', memoNo)
         .single();
     
-    if (error && error.code !== 'PGRST116') { // PGRST116 is 'not found'
-         handleSupabaseError(error, 'searchInvoiceByMemoNo');
+    if (error) {
+        if (error.code === 'PGRST116') return null; // Not found
+        if (isTableMissing(error)) return null; // Table missing
+        handleSupabaseError(error, 'searchInvoiceByMemoNo');
     }
     return data as InvoiceData | null;
 };
@@ -108,7 +124,10 @@ export const deleteInvoice = async (memoNo: string): Promise<void> => {
 export const getCustomers = async (): Promise<Customer[]> => {
     if (isKeyMissing()) return [];
     const { data, error } = await supabase.from('customers').select('*');
-    if (error) handleSupabaseError(error, 'getCustomers');
+    if (error) {
+        if (isTableMissing(error)) return [];
+        handleSupabaseError(error, 'getCustomers');
+    }
     return data as Customer[];
 };
 
@@ -147,7 +166,10 @@ export const updateCustomerAddresses = async (customerName: string): Promise<Cus
         .select('customers_address1, customers_address2')
         .ilike('customers_name', `%${customerName}%`);
 
-    if (error) handleSupabaseError(error, 'updateCustomerAddresses');
+    if (error) {
+        if (isTableMissing(error)) return [];
+        handleSupabaseError(error, 'updateCustomerAddresses');
+    }
     
     return (data || []).map((c: any) => ({ 
         address1: c.customers_address1, 
@@ -160,7 +182,10 @@ export const updateCustomerAddresses = async (customerName: string): Promise<Cus
 export const getAreas = async (): Promise<Area[]> => {
     if (isKeyMissing()) return [];
     const { data, error } = await supabase.from('areas').select('*');
-    if (error) handleSupabaseError(error, 'getAreas');
+    if (error) {
+        if (isTableMissing(error)) return [];
+        handleSupabaseError(error, 'getAreas');
+    }
     return data as Area[];
 };
 
@@ -186,7 +211,10 @@ export const deleteArea = async (id: number): Promise<void> => {
 export const getCalculations = async (): Promise<Calculation[]> => {
     if (isKeyMissing()) return [];
     const { data, error } = await supabase.from('calculations').select('*');
-    if (error) handleSupabaseError(error, 'getCalculations');
+    if (error) {
+        if (isTableMissing(error)) return [];
+        handleSupabaseError(error, 'getCalculations');
+    }
     return data as Calculation[];
 };
 
@@ -212,7 +240,10 @@ export const deleteCalculationRecord = async (id: number): Promise<void> => {
 export const getLookupData = async (): Promise<Lookup[]> => {
     if (isKeyMissing()) return [];
     const { data, error } = await supabase.from('lookup').select('*');
-    if (error) handleSupabaseError(error, 'getLookupData');
+    if (error) {
+        if (isTableMissing(error)) return [];
+        handleSupabaseError(error, 'getLookupData');
+    }
     return data as Lookup[];
 };
 
@@ -234,86 +265,62 @@ export const deleteLookupRecord = async (id: number): Promise<void> => {
 };
 
 
-// 6. View All Services (Calculated View)
+// 6. View Services Logic (Aggregation)
 export const getViewAllServicesData = async (): Promise<string[][]> => {
     if (isKeyMissing()) return [];
-    // Fetch base data
-    const areas = await getAreas();
-    const calculations = await getCalculations();
+    const [areas, calculations] = await Promise.all([getAreas(), getCalculations()]);
     
-    // In-memory join logic (same as before to preserve business logic without complex SQL views)
-    const calculationMap = new Map<string, Calculation>();
-    calculations.forEach(calc => calculationMap.set(calc.products_type_category, calc));
+    const services: string[][] = [];
     
-    const BRANDS = ["Transport", "VIKING"];
-
-    const generatedData: string[][] = [];
+    // Cross-reference Areas and Calculations to generate available services.
+    // Assuming a cross-join or that calculations apply to all areas based on usage patterns.
     for (const area of areas) {
-        for (const vehicleType of VEHICLE_TYPES) {
-            for (const brand of BRANDS) {
-                const lookupKey = `${brand}_${vehicleType}_${area.locationCategory}`;
-                const calcData = calculationMap.get(lookupKey);
-                
-                if (calcData) {
-                    const productItem = `${brand}_${area.locationCategory}_${area.locationArea}_${vehicleType}`.replace(/ /g, '_');
-                    
-                    let driverBata = calcData.products_driver_bata;
-                    if (brand === 'VIKING' && area.locationArea !== 'Chengalpet') {
-                        driverBata = '0';
-                    }
-
-                    generatedData.push([
-                        area.locationArea,
-                        area.locationCategory,
-                        `${brand} - ${vehicleType}`,
-                        productItem,
-                        calcData.products_minimum_hours,
-                        calcData.products_minimum_km,
-                        calcData.products_minimum_charges,
-                        calcData.products_additional_hours_charges,
-                        calcData.products_running_hours,
-                        driverBata,
-                        vehicleType,
-                    ]);
-                }
-            }
+        for (const calc of calculations) {
+             const row = [
+                area.locationArea,                          // 0
+                area.locationCategory,                      // 1
+                calc.products_type_category,                // 2: Vehicle Type / Category Name
+                `${area.locationArea}-${calc.products_type_category}`, // 3: Product Item (ID)
+                calc.products_minimum_hours,                // 4
+                calc.products_minimum_km,                   // 5
+                calc.products_minimum_charges,              // 6
+                calc.products_additional_hours_charges,     // 7
+                calc.products_running_hours,                // 8
+                calc.products_driver_bata,                  // 9
+                calc.products_type_category                 // 10: Vehicle Type (Raw)
+            ];
+            services.push(row);
         }
     }
-    return generatedData;
+    return services;
 };
 
 
 // 7. Database Import/Export
-export const exportDb = async (): Promise<any> => {
-    if (isKeyMissing()) throw new Error("Supabase Key missing");
-    const tables = ['invoices', 'customers', 'areas', 'calculations', 'lookup'];
-    const data: { [key: string]: any[] } = {};
-    
-    for (const table of tables) {
-        const { data: tableData, error } = await supabase.from(table).select('*');
-        if (error) throw new Error(`Failed to export ${table}: ${error.message}`);
-        data[table] = tableData || [];
-    }
-    return data;
+export const exportDb = async () => {
+    if (isKeyMissing()) return {};
+    const [invoices, customers, areas, calculations, lookup] = await Promise.all([
+        getInvoices(),
+        getCustomers(),
+        getAreas(),
+        getCalculations(),
+        getLookupData()
+    ]);
+    return { invoices, customers, areas, calculations, lookup };
 };
 
-export const importDb = async (data: any): Promise<string> => {
-    if (isKeyMissing()) throw new Error("Supabase Key missing");
-    const tables = ['invoices', 'customers', 'areas', 'calculations', 'lookup'];
+export const importDb = async (data: any) => {
+    if (isKeyMissing()) return;
     
-    // Basic validation
-    if (!tables.every(name => data[name] && Array.isArray(data[name]))) {
-        throw new Error("Invalid database file format or missing data.");
-    }
+    const tryUpsert = async (table: string, rows: any[]) => {
+        if (!rows || rows.length === 0) return;
+        const { error } = await supabase.from(table).upsert(rows);
+        if (error) console.error(`Error importing ${table}:`, error);
+    };
 
-    // Upsert data for each table
-    for (const table of tables) {
-        const rows = data[table];
-        if (rows.length > 0) {
-            const { error } = await supabase.from(table).upsert(rows);
-            if (error) throw new Error(`Failed to import ${table}: ${error.message}`);
-        }
-    }
-    
-    return "Database imported successfully into Supabase.";
+    if(data.invoices) await tryUpsert('invoices', data.invoices);
+    if(data.customers) await tryUpsert('customers', data.customers);
+    if(data.areas) await tryUpsert('areas', data.areas);
+    if(data.calculations) await tryUpsert('calculations', data.calculations);
+    if(data.lookup) await tryUpsert('lookup', data.lookup);
 };
