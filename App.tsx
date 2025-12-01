@@ -12,11 +12,13 @@ import AreasCRUD from './components/AreasCRUD';
 import CalculationsCRUD from './components/CalculationsCRUD';
 import InvoiceCRUD from './components/InvoiceCRUD';
 import LookupCRUD from './components/LookupCRUD';
+import { isKeyMissing, updateSupabaseKey } from './services/googleScriptMock';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
   const [editingInvoiceMemo, setEditingInvoiceMemo] = useState<string | null>(null);
   const [printOnLoad, setPrintOnLoad] = useState(false);
+  const [showKeyModal, setShowKeyModal] = useState(isKeyMissing());
 
   const handleNavigate = (page: Page) => {
     setEditingInvoiceMemo(null);
@@ -79,6 +81,37 @@ const App: React.FC = () => {
     return pageName.charAt(0).toUpperCase() + pageName.slice(1).toLowerCase();
   }, [currentPage, editingInvoiceMemo, printOnLoad]);
 
+  if (showKeyModal) {
+      return (
+          <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 z-50 font-sans">
+              <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+                  <h2 className="text-2xl font-bold mb-4 text-gray-800">Setup Database</h2>
+                  <p className="text-gray-600 mb-4 text-sm">
+                      To connect to the Supabase backend, please enter your <code>anon</code> (public) API Key.
+                  </p>
+                  <p className="text-xs text-gray-500 mb-2">Project ID: zcuxxugwmgoifmeahydl</p>
+                  <input 
+                      type="text" 
+                      id="supabase-key-input"
+                      className="w-full border border-gray-300 p-2 rounded mb-4 focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  />
+                  <button 
+                      onClick={() => {
+                          const input = document.getElementById('supabase-key-input') as HTMLInputElement;
+                          if (input.value.trim()) {
+                              updateSupabaseKey(input.value.trim());
+                          }
+                      }}
+                      className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition"
+                  >
+                      Save & Reload
+                  </button>
+                  <p className="mt-4 text-xs text-center text-gray-400">This key will be stored in your browser's local storage.</p>
+              </div>
+          </div>
+      );
+  }
 
   return (
     <ToastProvider>
