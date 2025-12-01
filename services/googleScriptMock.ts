@@ -1,22 +1,38 @@
 import { createClient } from '@supabase/supabase-js';
 import { InvoiceData, Customer, CustomerAddress, Area, Calculation, Lookup } from '../types';
-import { VEHICLE_TYPES } from '../constants';
 
 // --- Supabase Configuration ---
 const supabaseUrl = 'https://zcuxxugwmgoifmeahydl.supabase.co';
 const STORAGE_KEY = 'sbt_transport_supabase_key';
 
-// Safely access process.env or localStorage to get the key
+// Safely access process.env, import.meta.env, or localStorage to get the key
 const getSupabaseKey = () => {
     let key = '';
+
     try {
+        // Vite / Modern bundler support
         // @ts-ignore
-        if (typeof process !== 'undefined' && process.env && process.env.SUPABASE_KEY) {
+        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_KEY) {
             // @ts-ignore
-            key = process.env.SUPABASE_KEY;
+            key = import.meta.env.VITE_SUPABASE_KEY;
         }
     } catch (e) {
-        // process is not defined in browser
+        // import.meta is not available
+    }
+
+    if (!key) {
+        try {
+            // Node / CRA / Next.js support
+            // @ts-ignore
+            if (typeof process !== 'undefined' && process.env) {
+                // @ts-ignore
+                if (process.env.SUPABASE_KEY) key = process.env.SUPABASE_KEY;
+                // @ts-ignore
+                else if (process.env.REACT_APP_SUPABASE_KEY) key = process.env.REACT_APP_SUPABASE_KEY;
+            }
+        } catch (e) {
+            // process is not defined
+        }
     }
 
     if (!key && typeof window !== 'undefined' && window.localStorage) {
@@ -74,6 +90,8 @@ export const getInvoices = async (): Promise<InvoiceData[]> => {
 export const generateNewMemoNumber = async (): Promise<string> => {
     if (isKeyMissing()) return 'SBT-001';
     // Fetch all memo numbers to calculate the next one. 
+    // Optimization: In a real app, use .order() and .limit(1) if sorting logic permits, 
+    // but fetching column only is acceptable for small datasets.
     const { data, error } = await supabase.from('invoices').select('trips_memo_no');
     if (error) {
         if (isTableMissing(error)) return 'SBT-001';
@@ -91,9 +109,10 @@ export const generateNewMemoNumber = async (): Promise<string> => {
 };
 
 export const saveInvoiceData = async (invoice: InvoiceData): Promise<string> => {
+    // We use trips_memo_no as the unique key for updates
     const { error } = await supabase
         .from('invoices')
-        .upsert(invoice);
+        .upsert(invoice, { onConflict: 'trips_memo_no' });
     
     if (error) handleSupabaseError(error, 'saveInvoiceData');
     return 'SUCCESS';
@@ -268,6 +287,7 @@ export const deleteLookupRecord = async (id: number): Promise<void> => {
 // 6. View Services Logic (Aggregation)
 export const getViewAllServicesData = async (): Promise<string[][]> => {
     if (isKeyMissing()) return [];
+    // If tables are missing, these return empty arrays, which is safe.
     const [areas, calculations] = await Promise.all([getAreas(), getCalculations()]);
     
     const services: string[][] = [];
@@ -312,15 +332,18 @@ export const exportDb = async () => {
 export const importDb = async (data: any) => {
     if (isKeyMissing()) return;
     
-    const tryUpsert = async (table: string, rows: any[]) => {
+    const tryUpsert = async (table: string, rows: any[], conflictKey?: string) => {
         if (!rows || rows.length === 0) return;
-        const { error } = await supabase.from(table).upsert(rows);
+        
+        const options = conflictKey ? { onConflict: conflictKey } : undefined;
+        const { error } = await supabase.from(table).upsert(rows, options);
+        
         if (error) console.error(`Error importing ${table}:`, error);
     };
 
-    if(data.invoices) await tryUpsert('invoices', data.invoices);
-    if(data.customers) await tryUpsert('customers', data.customers);
-    if(data.areas) await tryUpsert('areas', data.areas);
-    if(data.calculations) await tryUpsert('calculations', data.calculations);
-    if(data.lookup) await tryUpsert('lookup', data.lookup);
+    if(data.invoices) await tryUpsert('invoices', data.invoices, 'trips_memo_no');
+    if(data.customers) await tryUpsert('customers', data.customers); // uses id
+    if(data.areas) await tryUpsert('areas', data.areas); // uses id
+    if(data.calculations) await tryUpsert('calculations', data.calculations); // uses id
+    if(data.lookup) await tryUpsert('lookup', data.lookup); // uses id
 };
