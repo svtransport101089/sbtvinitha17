@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SBT Transport Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0"
+  }
+}
+</script>
+<style>
+    @media print {
+      @page {
+        size: A5 landscape;
+        margin: 0.5cm;
+      }
+
+      body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        background-color: #fff;
+      }
+
+      /* Hide sidebar, header, and form buttons */
+      body > #root > div > div:first-child, /* Sidebar */
+      body > #root > div > div > header, /* Header */
+      .print-hide {
+        display: none !important;
+      }
+      
+      /* Reset layout for printing */
+      main, .container, #root, body {
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: visible !important;
+      }
+
+      .container {
+        max-width: 100% !important;
+      }
+
+      /* Style the invoice form for printing */
+      form > .bg-white {
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        font-size: 9px;
+      }
+
+      /* Adjust logo and header for A5 */
+      form img {
+        height: 20mm !important;
+        width: auto !important;
+      }
+      form h1 {
+        font-size: 14px !important;
+      }
+
+
+      /* Make inputs look like static text */
+      input,
+      textarea,
+      input[readonly],
+      input[type="date"],
+      input[type="time"],
+      input[type="number"] {
+        border: none !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+        padding: 1px !important;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        color: #000 !important;
+        font-size: 9px !important;
+      }
+
+      /* Hide the search button */
+      input[name="trips_memo_no"] + button {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+  <body class="bg-gray-100">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
